@@ -37,8 +37,8 @@ struct node_lista
 
 struct hash
 {
-    unsigned char compactado[256];
-    int profundidade[256];
+    unsigned short compactado[256];
+    unsigned short profundidade[256];
     node_lista *head_hash[256]; //tirar dps
 };
 int contando_bits(int num){
@@ -51,9 +51,9 @@ int contando_bits(int num){
     return bits;
 }
 void binario(int num){
-   int bin[8]; // <---------------
+   int bin[16]; // <---------------
    int aux;
-   for (aux = 7; aux >= 0; aux--)
+   for (aux = 15; aux >= 0; aux--)
    {
       if (num % 2 == 0)
          bin[aux] = 0;
@@ -62,7 +62,7 @@ void binario(int num){
       num = num / 2;
    }
 
-   for (aux = 0; aux < 8; aux++)
+   for (aux = 0; aux < 16; aux++)
        printf("%d", bin[aux]);
 
    printf(" ");
@@ -73,7 +73,8 @@ void para_listas(node_lista *head){
     printf("lista: ");
     
     while(ok!=NULL){
-       binario(ok->byte_comp);
+        printf("%c ", ok->byte_comp);
+       //binario(ok->byte_comp);
         ok=ok->next;
     }
     printf("\n");
@@ -187,7 +188,7 @@ void criar_arvore(queue *fila){ //na função cria a arvore e faz os ponteiro es
              												// e a frequencia sera a soma da frequencia dos filhos
     criar_arvore(fila);// recursivamente passa a nova fila ja com o no pai enfileirado
 }
-void dicionario(node_arvore *head, hash *new_hash, unsigned char byte, int profundidade) {
+void dicionario(node_arvore *head, hash *new_hash, unsigned short byte, int profundidade) {
     if(head!=NULL) {
         if (head->left==NULL && head->right==NULL) {
             new_hash->compactado[head->byte] = byte;
@@ -201,12 +202,21 @@ void dicionario(node_arvore *head, hash *new_hash, unsigned char byte, int profu
         dicionario(head->right, new_hash, byte, profundidade);
     }
 }
-void escreve(node_lista *head, node_arvore *cabeca_arvore){
-    FILE *salvar= fopen("compactadah.huff", "wb"); //criando arquivo em binário
+void escreve(node_lista *head, node_arvore *cabeca_arvore, char arquivo[]){
+    char compactado[100];
+    strcpy(compactado,arquivo);
+    strcat(compactado,".huff");
+    FILE *salvar= fopen(compactado, "wb"); //criando arquivo em binário
 
-    unsigned char cabecalho1, cabecalho2, aux;
+    unsigned char cabecalho1, cabecalho2, aux = 0;
+    unsigned short cabecalho=0;
     int i = 13 - tamanho_da_arvore;
     cabecalho1 = lixo << 5;
+    cabecalho = lixo<<13;
+    cabecalho = cabecalho | tamanho_da_arvore;
+    
+    //printf("teste ");
+    binario(cabecalho);
     int tam_arv_bin = contando_bits(tamanho_da_arvore);
     if(tam_arv_bin < 8){
         cabecalho2 = tamanho_da_arvore;
@@ -216,8 +226,10 @@ void escreve(node_lista *head, node_arvore *cabeca_arvore){
         cabecalho1 = (cabecalho1 | aux);
         cabecalho2 = tamanho_da_arvore << (13 - tam_arv_bin);
    }
-    fwrite(&cabecalho1, sizeof(char), 1, salvar);
-    fwrite(&cabecalho2, sizeof(char), 1, salvar);
+   printf("TAMANHO DA ARVORE: %d\n", tamanho_da_arvore);
+    fprintf(salvar, "%hu", cabecalho);
+    //fwrite(&cabecalho, sizeof(unsigned short), 2, salvar);
+    //fwrite(&cabecalho2, sizeof(char), 1, salvar);
     escreve_arvore(cabeca_arvore, salvar);
     while(head != NULL)
     {
@@ -237,6 +249,7 @@ void compactar(hash *new_hash, char arquivo[], node_arvore *cabeca_arvore){
     FILE *pont2=fopen(arquivo, "rb");
 
     while(fscanf(pont2,"%c", &input)!=EOF){
+        //printf("teste'%c'", input);
         bits= new_hash->profundidade[input] - 1;
         while(bits>=0){
             if(posicao==8){
@@ -261,10 +274,14 @@ void compactar(hash *new_hash, char arquivo[], node_arvore *cabeca_arvore){
     //if(posicao<7){
         lixo=8-posicao;
         output=output<<lixo;
+        binario(output);
         fim=cria_lista_invertida(head,fim,output);
+        if(head==NULL){
+            head = fim;
+        }
     //}
-    escreve(head, cabeca_arvore);
-    //para_listas(head);
+    para_listas(head);
+    escreve(head, cabeca_arvore, arquivo);
     fclose(pont2);
 
 }
@@ -323,12 +340,20 @@ node_arvore *cria_arv_pre(unsigned char arv[], int tam_arvore, node_arvore *head
     return novo_no;
 } 
 
-void descompactar(node_arvore *head_arv, node_lista *head_list, node_lista *fim_list, int descartar, FILE *pont){
+void descompactar(node_arvore *head_arv, node_lista *head_list, node_lista *fim_list, int descartar, FILE *pont, char arquivo[]){
     int i=7, folha=0;
     unsigned char bit;
     //para_listas(head_list);
     //printf("\n");
-    FILE *descomp=fopen("descompactadah.dat", "wb");
+    int tamanho =strlen(arquivo);
+    printf("nome%d\n", tamanho);
+    char descompactado[tamanho];
+    int j;
+    for(j=0; j<tamanho-5;j++){
+        descompactado[j]=arquivo[j];
+    }
+    descompactado[j] = '\0';
+    FILE *descomp=fopen(descompactado, "wb");
     node_arvore *aux=head_arv;
     printf("descartar %d\n", descartar);
     while(head_list!=NULL){
@@ -394,22 +419,28 @@ void descompactar(node_arvore *head_arv, node_lista *head_list, node_lista *fim_
     fclose(descomp);
 }
 
-void lendo_cabecalho(FILE *pont){
-    unsigned char cabecalho1, cabecalho2;
-    int descartar, tam_arvore, i=31, j;
-    fscanf(pont,"%c", &cabecalho1);
+void lendo_cabecalho(FILE *pont, char arquivo[]){
+    unsigned short cabecalho1, cabecalho2;
+    short int descartar, tam_arvore;
+    int i=31, j;
+    fscanf(pont,"%hu", &cabecalho1);
     binario(cabecalho1);
-    fscanf(pont,"%c", &cabecalho2);
-    binario(cabecalho2);
+    //fscanf(pont,"%c", &cabecalho2);
+    // binario(cabecalho2);
 
-    descartar = cabecalho1 >> 5;
-    tam_arvore = ((cabecalho1 & i)*pow(2,8)) + (cabecalho2);
+    descartar = cabecalho1 >> 13;
+    cabecalho1=cabecalho1<<3;
+    cabecalho1=cabecalho1>>3;
+    tam_arvore = cabecalho1;
+    binario(cabecalho1);
+    //tam_arvore = ((cabecalho1 & i)*pow(2,8)) + (cabecalho2);
     unsigned char arv[tam_arvore];
     //printf("arvore %d\n", tam_arvore);
     for(j=0; j<tam_arvore; j++){
         fscanf(pont,"%c", &arv[j]);
         //printf("%c", arv[j]);    
     }
+    printf("TAMANHO DA ARVORE: %d\n", tam_arvore);
     node_arvore *head_descomp=NULL;
     head_descomp = cria_arv_pre(arv, tam_arvore, head_descomp);  
     node_arvore *aff=head_descomp;
@@ -424,7 +455,7 @@ void lendo_cabecalho(FILE *pont){
     }
     //para_listas(arq_comp);
     //printf("\n");
-    descompactar(head_descomp, arq_comp, fim_comp, descartar, pont);
+    descompactar(head_descomp, arq_comp, fim_comp, descartar, pont, arquivo);
 
     //para_listas(arq_comp);
     //para_arvores(head_descomp);
@@ -456,13 +487,13 @@ void main(){
         printf("Arquivo compactado!\n");
     }
     else if(opcao==2){
-        lendo_cabecalho(pont);
+        lendo_cabecalho(pont, arquivo);
         fclose(pont);
 
 
         printf("Arquivo descompactado!\n");
     }
-    else {
+    else{
         exit(1);
     }
 }
